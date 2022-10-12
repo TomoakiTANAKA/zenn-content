@@ -1,10 +1,21 @@
-
 ---
 title: "BiqQueryを利用してセッション数を求める"
+emoji: "🔰"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: [sql, firebase, bigquery]
 published: true
 ---
+
+## 概要
+
+- BigQuery初心者向けに、Session数の求め方を、できるだけ再現可能なように説明する
+
+## 想定読者
+
+- 基本的なSQLの記述ができる
+- BigQueryについてなんとなく知識がある
+- 普段GA4やFirebaseのダッシュボードを利用している
+
 
 ## 注意
 
