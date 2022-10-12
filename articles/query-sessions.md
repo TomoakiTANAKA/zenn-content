@@ -69,8 +69,12 @@ published: true
 -- 計算範囲指定、BigQueryのテーブル形式に合わせて「YYYYMMDD形式」の文字列をつくる
 -- WHERE部分で、「20220901」と直接指定しても良いが、
 -- いくつも日付範囲を指定する場合は、関数として定義すると便利
-CREATE TEMPORARY FUNCTION fromDate() AS FORMAT_DATE('%Y%m%d', DATE('2022-09-01'));
-CREATE TEMPORARY FUNCTION toDate() AS FORMAT_DATE('%Y%m%d', DATE('2022-09-01'));
+CREATE TEMPORARY FUNCTION fromDate() AS (
+  FORMAT_DATE('%Y%m%d', DATE('2022-09-01'))
+);
+CREATE TEMPORARY FUNCTION toDate() AS (
+  FORMAT_DATE('%Y%m%d', DATE('2022-09-30'));
+);
 
 -- 集計用のsessionsテーブル作成
 WITH sessions AS (
