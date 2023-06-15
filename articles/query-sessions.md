@@ -78,6 +78,8 @@ CREATE TEMPORARY FUNCTION toDate() AS (
 
 -- 集計用のsessionsテーブル作成
 WITH sessions AS (
+  -- （*1）各行（session_startイベントでフィルタリング済み）に対して、event_paramsを展開している。
+  -- つまり、ここで取り出している access_date と sid は同じ行をみていることになる。
   SELECT
     DATE(TIMESTAMP_MICROS(event_timestamp), 'Asia/Tokyo') AS access_date,
     (
