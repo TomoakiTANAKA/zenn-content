@@ -1,14 +1,14 @@
 ---
 title: "CloudFlareのプロキシを利用してFirebaseHostingしたサービスのTLS1.2暗号スイートを制限する"
-emoji: "🤔"
+emoji: "🔐"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: [network, Security, Firebase]
+topics: [network, Security, Firebase, cloudflare]
 published: true
 ---
 
 ## モチベーション
 
-JavaScriptで作成したゲームと簡単なAPIを提供するサービスを Firebase Hosting + Functions の構成で提供しています。このWebサイトに対してSSL LabsでスキャンをかけたところTLS1.2の中に脆弱な暗号スイートが発見されました。別の記事でWEAKの存在がすぐさまクリティカルなセキュリティインシデントになるかどうかはケースバイケースと書きました。
+Firebase Hosting にデプロイしたサービスに対して、SSL LabsでスキャンをかけたところTLS1.2の中に脆弱な暗号スイート（WEAK）が発見されました。別の記事では、WEAKの存在がすぐさまクリティカルなセキュリティインシデントになるかどうかはケースバイケースと書きました。
 
 このたび、連携先サービスからなんとしてもWEAKを無くせ（意訳）と指摘をうけたので、CloudFlareを利用して対応しました。
 
@@ -23,10 +23,10 @@ JavaScriptで作成したゲームと簡単なAPIを提供するサービスを 
 
 ### 補足
 
-- ホスティングサービスはAPI機能あり。`Firebase Hosting + Functions` の構成。構成変更はコストが高く避けたい。
+- ちょっとしたAPI機能があるため`Firebase Hosting + Functions` の構成。構成変更はコストが高く避けたい。
 - ドメイン管理・DNSの設定は `CloudFlare` を利用している
-- 本番環境、検証環境（サブドメイン運用）など複数環境が存在するが、すべて同じ設定変更で良い（個別に設定を分ける必要はない）
-- Firebase Hostingの証明書について
+- サブドメインなど、いくつか環境が存在するが、すべて同じ設定変更で良い
+- Firebase Hosting では個別に暗号スイートをカスタマイズできない
   - Googleが自動的に用意するためカスタマイズできない
   - TLS1.2以上の通信を強制、TLS1.3もサポート
   - TLS1.2は後方互換性のためか、2025年1月時点ではWEAKな暗号スイートが含まれている（cbc系の暗号スイート）
@@ -34,16 +34,16 @@ JavaScriptで作成したゲームと簡単なAPIを提供するサービスを 
 - 安全でないTLS1.2の暗号スイートを利用するクライアントは相当古い
   - cbc系の暗号スイートで通信をするクライアントは相当古く現代で利用している人はほぼいない…気がする
 
-### 結論
+## 実装のまとめ（結論）
 
-- CloudFlareのゾーンに対してAPI経由でTLS1.2の暗号スイートを変更する（変更はAPI経由のみ提供）
-- DNS設定に対してキャッシュを有効化し、クライアントからのアクセスをCDNエッジ経由に変更する
-- CloudFlare + Firebase Hosting のデフォルト構成では、リダイレクトループが発生する（理由は後述）。SSL/TLSの暗号化モードをデフォルトのフレキシブルから、フルに変更
+- Cloudflareのゾーンに対してAPI経由でTLS1.2の暗号スイートを変更（変更はAPI経由のみ可能）
+- DNS設定に対してキャッシュを有効化し、クライアントからのアクセスをCloudflare経由に変更
+- `CloudFlare + Firebase Hosting` の構成では、リダイレクトループが発生する可能性がある（理由は後述）。SSL/TLSの暗号化モードをデフォルトのフレキシブルから、フルに変更
 
 
-このような構成・設定変更をすることで、クライアントから直接オリジンであるFirebase Hostingにアクセスさせない構成とし、CDNエッジで古い暗号スイートでのアクセスをドロップさせることができました。
+このような変更で、Firebase Hosting にデプロイしているサイトへのアクセスにおいて古い暗号スイートの利用をやめさせることに成功しました。
 
-なおCloudFlareの暗号スイート変更に関しては、有料のような記載もあった[^2]が、ゾーン全体に対しての設定変更はfreeプランで対応可能でした。また今回関係ありませんが、TLS1.3の暗号スイートの変更はできないようです。
+なおCloudFlareの暗号スイート変更に関しては、有料のような記載[^2]もありましたが、ゾーン全体に対しての設定変更はFreeプランで対応可能でした。また今回関係ありませんが、TLS1.3の暗号スイートの変更はできないようです。
 
 [^2]: とおもって記事を書く際に見直したが見つけられなかった
 
@@ -92,7 +92,9 @@ curl https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/ciphers \
 
 `CLOUDFLARE_API_KEY`は、ダッシュボード（ドメインの設定画面）の右下にある「APIトークンを取得」> Global API Key から取得します。
 
+:::details Global API Keyの確認
 ![](https://storage.googleapis.com/zenn-user-upload/68359492e61d-20250129.png)
+:::
 
 :::message
 Global API Keyは非推奨になりつつあり、代わりに**API Tokens**の使用が推奨されています
@@ -101,9 +103,10 @@ Global API Keyは非推奨になりつつあり、代わりに**API Tokens**の�
 
 `ZONE_ID` は、ダッシュボード（ドメインの設定画面）の右下に書いてあります。ドメインごとに変わります。
 
+:::details ZONE_IDの確認
+
 ![](https://storage.googleapis.com/zenn-user-upload/849aafe0c9b8-20250129.png)
-
-
+:::
 
 
 ### 2. CloudFlareのゾーンに対してAPI経由で暗号スイートを変更する
@@ -148,10 +151,10 @@ see: [Recommendations](https://developers.cloudflare.com/ssl/edge-certificates/a
 
 ### 3. リダイレクトループしないように、SSL/TLS暗号化モードを変更する
 
-デフォルトはフレキシブルになっています。プロキシを有効化して直接オリジンにアクセスがいかないようにした場合、以下の通信になります。
+デフォルトはフレキシブルになっています。プロキシを有効化し直接オリジンへのアクセス制御をした場合、以下の通信になります。
 
 ```
-# プロキシON + 暗号化モード：フレキシブルの場合
+### プロキシON + 暗号化モード：フレキシブルの場合 ###
 
 クライアント
 ↓
@@ -164,9 +167,9 @@ Cloudflare
 オリジンサーバー
 ```
 
-オリジンサーバーがFirebase Hostingの場合ですが、HTTPのアクセスを自動的にHTTPSにリダイレクトします。そのため、CloudflareからHTTPでアクセスされると、HTTPSにリダイレクトされ続け、リダイレクトループが発生してしまします（経験済み）。
+オリジンサーバーがFirebase Hostingの場合、HTTPのアクセスを自動的にHTTPSにリダイレクトします。そのため、CloudflareからHTTPアクセスすると、HTTPSにリダイレクトされ続け、リダイレクトループが発生してしまします（経験談）。
 
-`SSL/TLS > 概要 > 設定` より、暗号化モードを変更します。Cloudflareとオリジンサーバーの通信をHTTPSにすればよいので、「フル」以上にします。
+回避するために、`SSL/TLS > 概要 > 設定` から、暗号化モードを変更します。Cloudflareとオリジンサーバーの通信をHTTPSにすればよいので、「フル」以上に設定します。
 
 ![](https://storage.googleapis.com/zenn-user-upload/5390178c4617-20250129.png)
 
@@ -179,19 +182,21 @@ Cloudflare
 
 ### 5. SSL Labsで暗号スイートが切り替わっていることを確認する
 
+[SSL Labs](https://www.ssllabs.com/ssltest/)を使って暗号スイートが変わっていることを確認します。
 
-[SSL Labs](https://www.ssllabs.com/ssltest/)を使って暗号スイートが変わっていることを確認します。CloudFlare経由でアクセスするようにしているため、経路が増えます。
-
+CloudFlare経由でアクセスするようにしているため、経路が増えます。
 
 ![](https://storage.googleapis.com/zenn-user-upload/fd2fd01d05a4-20250129.png)
+
+TLS 1.2の暗号スイートが切り替わっています。
 
 ![](https://storage.googleapis.com/zenn-user-upload/5613f97a1951-20250129.png)
 
 ## QA
 
-### TLS1.2の暗号スイートを4つ設定したがSSL Labsの結果でRSA系の暗号スイートが欠落し2つの暗号スイート許可になっているのはなぜ？
+### 暗号スイートの設定とSSL Labsの結果が異なる。なぜ？
 
-トラブルシューティングというほどではないですが、SSL Labsの結果をみるとTLS1.2 の暗号スイートが2つだけになっていました。
+APIで暗号スイートを4つ設定しました。しかしSSL Labsの結果をみると、RSA系の暗号スイートが欠落し2つの暗号スイート許可になっています。
 
 ```
 # TLS 1.2 (suites in server-preferred order)
@@ -200,27 +205,23 @@ Cloudflare
 ・TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
 ```
 
-RSA系の暗号スイートが欠落しています。
+今回Cloudflareのフリープランを利用しています。このためサーバー証明書[^3]はUniversal タイプを利用しています。証明書は `「ECDSA SHA256」` です。
 
-今回Cloudflareのフリープランを利用しています。このためサーバー証明書[^1]はUniversal タイプを利用しています。このとき証明書は「ECDSA SHA256」となっています。
-
-[^1]: Cloudflareの場合エッジ証明書という記載です。
+[^3]: Cloudflareの場合エッジ証明書という記載です。
 
 ![](https://storage.googleapis.com/zenn-user-upload/c2e6d41069e9-20250130.png)
 
-サーバー証明書に含まれる公開鍵の種類が「ECDSA」のため、TLSハンドシェイク時に「RSA」が使われず、SSL Labsのスキャン結果から除外されていると理解しました。
+サーバー証明書に含まれる公開鍵の種類が「ECDSA」のため、TLSハンドシェイク時に「RSA」が使われず、結果的にSSL Labsのスキャン結果から除外されたと理解しました。
 
-### キャッシュを挟むことによって計測していたAnalyticsのデータは計測できる？
-
-オリジンにはGoogle Analyticsを配置してPVやイベントを計測しています。キャッシュを挟んだ場合でも正常にAnalyticsのデータは計測できるのでしょうか？
+### Cloudflare経由のアクセスでAnalyticsのデータ計測は可能か？
 
 こちらは問題なく計測できます。
 
-イベントなどはオリジンに配置したGoogleのSDKが実行され計測されるので、キャッシュの影響は受けないという理解です。実際に、キャッシュ導入後もAnalyticsにログが計測されています。
+イベント計測は、オリジンに配置したGoogleのSDKが実行されて計測されるため、キャッシュの影響は受けないという理解です。実際に、キャッシュ導入後もAnalyticsにログが計測されています。
 
-また、アクセス元なども計測できています。これはCloudflareが、`CF-Connecting-IP` ヘッダーでアクセスもとのIPを転送しているようで、それをGoogleのSDKが適切に処理しているからと理解しています。どのようなヘッダーを送りつけているかは公式ドキュメント[^2]を確認ください。
+また、アクセス元なども計測できています。これはCloudflareが、`CF-Connecting-IP` ヘッダーでアクセスもとのIPを転送しているようで、それをGoogleのSDKが適切に処理しているからと理解しています。どのようなヘッダーを送りつけているかは公式ドキュメント[^4]を確認ください。
 
-[^2]: [Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)
+[^4]: [Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)
 
 ## まとめ
 
